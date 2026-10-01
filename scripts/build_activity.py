@@ -62,7 +62,13 @@ def card(repos, languages, dark):
         parts.append(f'<rect x="{x}" y="96" width="288" height="127" rx="10" fill="{surface}" stroke="{border}"/>')
         name = repo["name"]
         # Two deliberate lines keep repository names readable at profile width.
-        lines = [name] if len(name) <= 26 else [name[:26], name[26:49] + ("…" if len(name) > 49 else "")]
+        if len(name) <= 26:
+            lines = [name]
+        else:
+            breaks = [n + 1 for n, char in enumerate(name[:26]) if char in "-_" and n >= 8]
+            cut = min(breaks, key=lambda n: abs(n - len(name) / 2)) if breaks else 26
+            rest = name[cut:]
+            lines = [name[:cut], rest if len(rest) <= 26 else rest[:25] + "…"]
         text(x + 16, 123, f"0{i+1} / PUBLIC REPOSITORY", 10, muted, 600, 'letter-spacing="1"')
         for j, line in enumerate(lines):
             text(x + 16, 149 + 19 * j, line, 15, ink, 600)
