@@ -1,0 +1,71 @@
+name: Refresh profile visuals
+
+on:
+  schedule:
+    - cron: "23 1 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/profile.yml
+      - scripts/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: profile-visuals
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out profile source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Generate public activity cards
+        run: python3 scripts/build_activity.py
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PROFILE_USER: ${{ github.repository_owner }}
+
+      - name: Generate contribution snakes
+        uses: Platane/snk/svg-only@d8f6715049803e982ee5ff501b6b9b7d5deeb09b # v3
+        with:
+          github_user_name: ${{ github.repository_owner }}
+          outputs: |
+            dist/github-snake.svg?color_snake=%237c3aed&color_dots=%23ebedf0,%23baf3e8,%2366d9c4,%2324ad98,%230b7f72
+            dist/github-snake-dark.svg?palette=github-dark&color_snake=%23a78bfa&color_dots=%23161b22,%23144348,%231a7175,%2327b2ab,%235eead4
+
+      - name: Publish generated assets to output branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROFILE_REPOSITORY: ${{ github.repository }}
+          GH_HOST: github.com
+        run: |
+          set -euo pipefail
+          test -s dist/github-snake.svg
+          test -s dist/github-snake-dark.svg
+          test -s dist/activity-light.svg
+          test -s dist/activity-dark.svg
+          gh auth setup-git
+          git init --initial-branch=output dist
+          cd dist
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://github.com/${PROFILE_REPOSITORY}.git"
+          if git ls-remote --exit-code origin refs/heads/output >/dev/null 2>&1; then
+            git fetch --depth=1 origin output
+            git reset --soft FETCH_HEAD
+          fi
+          git add --all
+          if ! git diff --cached --quiet; then
+            git commit -m "Refresh contribution snake and public activity"
+            git push origin HEAD:output
+          fi
